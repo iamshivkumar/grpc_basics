@@ -71,21 +71,69 @@ func (*server) ReadBlog(ctx context.Context, req *blogpb.ReadBlogRequest) (*blog
 	data := &blogItem{}
 	filter := bson.D{primitive.E{Key: "_id", Value: oid}}
 	res := collection.FindOne(context.Background(), filter)
-	if err := res.Decode(data); err!=nil {
-      return nil, status.Errorf(
-		  codes.NotFound,
-		  fmt.Sprintf("Cannot find blog with specified ID: %v",err),
-	  )
+	if err := res.Decode(data); err != nil {
+		return nil, status.Errorf(
+			codes.NotFound,
+			fmt.Sprintf("Cannot find blog with specified ID: %v", err),
+		)
 	}
 	return &blogpb.ReadBlogResponse{
 		Blog: &blogpb.Blog{
-			Id: data.ID.Hex(),
+			Id:       data.ID.Hex(),
 			AutherId: data.AuthorID,
-			Title: data.Title,
-			Content: data.Content,
+			Title:    data.Title,
+			Content:  data.Content,
 		},
 	}, nil
 
+}
+
+func (*server) UpdateBlog(ctx context.Context, req *blogpb.UpdateBlogRequest) (*blogpb.UpdateBlogResponse, error) {
+	blog := req.GetBlog()
+	oid, err := primitive.ObjectIDFromHex(blog.GetId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, fmt.Sprint("Cannot parse ID"))
+	}
+	data := bson.D{
+		primitive.E{
+			Key: "$set",
+			Value: bson.D{
+				primitive.E{
+					Key:   "author_id",
+					Value: blog.GetAutherId(),
+				},
+			},
+		},
+	}
+	filter := bson.D{primitive.E{Key: "_id", Value: oid}}
+	_, updateErr := collection.UpdateOne(context.Background(), filter, data)
+	if updateErr != nil {
+		return nil, status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Internal error: %v", updateErr),
+		)
+	}
+	return &blogpb.UpdateBlogResponse{
+		Blog: blog,
+	}, nil
+}
+
+func (*server) DeleteBlog(ctx context.Context, req *blogpb.DeleteBlogRequest) (*blogpb.DeleteBlogResponse, error) {
+    oid, err := primitive.ObjectIDFromHex(req.GetBlogId())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, fmt.Sprint("Cannot parse ID"))
+	}
+	filter := bson.D{primitive.E{Key: "_id", Value: oid}}
+	_, deleteErr := collection.DeleteOne(context.Background(),filter)
+	if deleteErr != nil {
+		return nil, status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Internal error: %v", deleteErr),
+		)
+	}
+	return &blogpb.DeleteBlogResponse{
+		BlogId: req.GetBlogId(),
+	},nil
 }
 
 func main() {

@@ -24,7 +24,7 @@ func main() {
 	}
 	defer cc.Close()
 	c := blogpb.NewBlogServiceClient(cc)
-	readBlog(c)
+	deleteBlog(c)
 
 }
 
@@ -44,6 +44,32 @@ func createBlog(c blogpb.BlogServiceClient) {
 
 func readBlog(c blogpb.BlogServiceClient) {
 	res, err := c.ReadBlog(context.Background(), &blogpb.ReadBlogRequest{
+		BlogId: "608236bcf26ded5be685f4a8",//608236bcf26ded5be685f4a8
+	})
+	if err != nil {
+		fmt.Printf("ERROR: can't read: %v",err)
+	}
+	fmt.Println(res)
+}
+
+func updateBlog(c blogpb.BlogServiceClient) {
+	res, err := c.UpdateBlog(context.Background(), &blogpb.UpdateBlogRequest{
+		Blog: &blogpb.Blog{
+			Id: "608236bcf26ded5be685f4a8",
+			AutherId: "2",
+			// Title:    "Title 2",
+			// Content:  "Content 2",
+		},
+	})
+	if err != nil {
+		log.Fatalf("Unexpected error: %v", err)
+	}
+	fmt.Println(res)
+}
+
+
+func deleteBlog(c blogpb.BlogServiceClient) {
+	res, err := c.DeleteBlog(context.Background(), &blogpb.DeleteBlogRequest{
 		BlogId: "608236bcf26ded5be685f4a8",//608236bcf26ded5be685f4a8
 	})
 	if err != nil {

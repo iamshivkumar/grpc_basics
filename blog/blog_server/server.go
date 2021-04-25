@@ -16,7 +16,8 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
+	// "google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
 )
 
@@ -119,12 +120,12 @@ func (*server) UpdateBlog(ctx context.Context, req *blogpb.UpdateBlogRequest) (*
 }
 
 func (*server) DeleteBlog(ctx context.Context, req *blogpb.DeleteBlogRequest) (*blogpb.DeleteBlogResponse, error) {
-    oid, err := primitive.ObjectIDFromHex(req.GetBlogId())
+	oid, err := primitive.ObjectIDFromHex(req.GetBlogId())
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, fmt.Sprint("Cannot parse ID"))
 	}
 	filter := bson.D{primitive.E{Key: "_id", Value: oid}}
-	_, deleteErr := collection.DeleteOne(context.Background(),filter)
+	_, deleteErr := collection.DeleteOne(context.Background(), filter)
 	if deleteErr != nil {
 		return nil, status.Errorf(
 			codes.Internal,
@@ -133,7 +134,43 @@ func (*server) DeleteBlog(ctx context.Context, req *blogpb.DeleteBlogRequest) (*
 	}
 	return &blogpb.DeleteBlogResponse{
 		BlogId: req.GetBlogId(),
-	},nil
+	}, nil
+}
+
+func (*server) ListBlog(req *blogpb.ListBlogRequest, stream blogpb.BlogService_ListBlogServer) error {
+	cur, err := collection.Find(context.Background(), bson.D{})
+	if err != nil {
+		return status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Internal error: %v", err),
+		)
+	}
+	defer cur.Close(context.Background())
+	for cur.Next(context.Background()) {
+		data := &blogItem{}
+		err := cur.Decode(data)
+		if err != nil {
+			return status.Errorf(
+				codes.Internal,
+				fmt.Sprintf("Decode error: %v", err),
+			)
+		}
+		stream.Send(&blogpb.ListBlogResponse{
+			Blog: &blogpb.Blog{
+				Id:       data.ID.Hex(),
+				AutherId: data.AuthorID,
+				Title:    data.Title,
+				Content:  data.Content,
+			},
+		})
+	}
+	if err := cur.Err() ; err !=nil {
+		return status.Errorf(
+			codes.Internal,
+			fmt.Sprintf("Internal error: %v", err),
+		)
+	}
+	return nil
 }
 
 func main() {
@@ -165,18 +202,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
-	certFile := "ssl/server.crt"
-	keyFile := "ssl/server.pem"
-	creds, sslErr := credentials.NewServerTLSFromFile(certFile, keyFile)
+	// certFile := "ssl/server.crt"
+	// keyFile := "ssl/server.pem"
+	// creds, sslErr := credentials.NewServerTLSFromFile(certFile, keyFile)
 
-	if sslErr != nil {
-		log.Fatalf("Failed loading certificates: %v", sslErr)
-		return
-	}
+	// if sslErr != nil {
+	// 	log.Fatalf("Failed loading certificates: %v", sslErr)
+	// 	return
+	// }
 
-	s := grpc.NewServer(grpc.Creds(creds))
+	s := grpc.NewServer()
+	// s := grpc.NewServer(grpc.Creds(creds))
 	blogpb.RegisterBlogServiceServer(s, &server{})
-
+    reflection.Register(s)
 	go func() {
 		if err := s.Serve(lis); err != nil {
 			log.Fatalf("failed to serve: %v", err)
